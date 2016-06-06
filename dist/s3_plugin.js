@@ -129,10 +129,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	    var s3UploadOptions = _options$s3UploadOpti === undefined ? {} : _options$s3UploadOpti;
 	    var _options$cloudfrontIn = options.cloudfrontInvalidateOptions;
 	    var cloudfrontInvalidateOptions = _options$cloudfrontIn === undefined ? {} : _options$cloudfrontIn;
+	    var _options$cloudfrontDi = options.cloudfrontDistributionRootOptions;
+	    var cloudfrontDistributionRootOptions = _options$cloudfrontDi === undefined ? {} : _options$cloudfrontDi;
 
 
 	    this.uploadOptions = s3UploadOptions;
 	    this.cloudfrontInvalidateOptions = cloudfrontInvalidateOptions;
+	    this.cloudfrontDistributionRootOptions = cloudfrontDistributionRootOptions;
 	    this.isConnected = false;
 	    this.cdnizerOptions = cdnizerOptions;
 	    this.urlMappings = [];
@@ -218,6 +221,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	        return _this2.uploadFiles(files);
 	      }).then(function () {
 	        return _this2.invalidateCloudfront();
+	      }).then(function () {
+	        return _this2.setCloudfrontDistributionRoot();
 	      });
 	    }
 	  }, {
@@ -485,6 +490,53 @@ return /******/ (function(modules) { // webpackBootstrap
 	          }, function (err, res) {
 	            return err ? reject(err) : resolve(res.Id);
 	          });
+	        } else {
+	          return resolve(null);
+	        }
+	      });
+	    }
+	  }, {
+	    key: 'setCloudfrontDistributionRoot',
+	    value: function setCloudfrontDistributionRoot() {
+	      var clientConfig = this.clientConfig;
+	      var cloudfrontDistributionRootOptions = this.cloudfrontDistributionRootOptions;
+
+
+	      function getCloudfrontDistribution(cloudfront, id) {
+	        return new Promise(function (resolve, reject) {
+	          cloudfront.getDistribution({
+	            Id: id
+	          }, function (err, res) {
+	            return err ? reject(err) : resolve(res);
+	          });
+	        });
+	      }
+
+	      function updateCloudfrontDistribution(cloudfront, params) {
+	        return new Promise(function (resolve, reject) {
+	          cloudfront.updateDistribution(params, function (err, res) {
+	            return err ? reject(err) : resolve(res);
+	          });
+	        });
+	      }
+
+	      return new Promise(function (resolve, reject) {
+	        if (cloudfrontDistributionRootOptions.DistributionId) {
+	          var cloudfront = new _awsSdk2.default.CloudFront();
+
+	          cloudfront.config.update({
+	            accessKeyId: clientConfig.s3Options.accessKeyId,
+	            secretAccessKey: clientConfig.s3Options.secretAccessKey
+	          });
+
+	          getCloudfrontDistribution(cloudfront, cloudfrontDistributionRootOptions.DistributionId).then(function (data) {
+	            data.DistributionConfig.DefaultRootObject = cloudfrontDistributionRootOptions.DefaultRootObject;
+	            return updateCloudfrontDistribution(cloudfront, {
+	              Id: cloudfrontDistributionRootOptions.DistributionId,
+	              DistributionConfig: data.DistributionConfig,
+	              IfMatch: data.ETag
+	            });
+	          }).then(resolve).catch(reject);
 	        } else {
 	          return resolve(null);
 	        }

@@ -38,11 +38,13 @@ module.exports = class S3Plugin {
       s3Options = {},
       cdnizerOptions = {},
       s3UploadOptions = {},
-      cloudfrontInvalidateOptions = {}
+      cloudfrontInvalidateOptions = {},
+      cloudfrontDistributionRootOptions = {}
     } = options
 
     this.uploadOptions = s3UploadOptions
     this.cloudfrontInvalidateOptions = cloudfrontInvalidateOptions
+    this.cloudfrontDistributionRootOptions = cloudfrontDistributionRootOptions
     this.isConnected = false
     this.cdnizerOptions = cdnizerOptions
     this.urlMappings = []
@@ -112,6 +114,7 @@ module.exports = class S3Plugin {
       .then((files) => this.filterAllowedFiles(files))
       .then((files) => this.uploadFiles(files))
       .then(() => this.invalidateCloudfront())
+      .then(() => this.setCloudfrontDistributionRoot())
   }
 
   handleErrors(error, compilation, cb) {
@@ -307,6 +310,49 @@ module.exports = class S3Plugin {
             }
           }
         }, (err, res) => err ? reject(err) : resolve(res.Id))
+      } else {
+        return resolve(null)
+      }
+    })
+  }
+
+  setCloudfrontDistributionRoot() {
+    var {clientConfig, cloudfrontDistributionRootOptions} = this
+
+    function getCloudfrontDistribution(cloudfront, id) {
+      return new Promise((resolve, reject) => {
+        cloudfront.getDistribution({
+          Id: id
+        }, (err, res) => err ? reject(err) : resolve(res))
+      })
+    }
+
+    function updateCloudfrontDistribution(cloudfront, params) {
+      return new Promise((resolve, reject) => {
+        cloudfront.updateDistribution(params, (err, res) => err ? reject(err) : resolve(res))
+      })
+    }
+
+    return new Promise(function(resolve, reject) {
+      if (cloudfrontDistributionRootOptions.DistributionId) {
+        var cloudfront = new aws.CloudFront()
+
+        cloudfront.config.update({
+          accessKeyId: clientConfig.s3Options.accessKeyId,
+          secretAccessKey: clientConfig.s3Options.secretAccessKey,
+        })
+
+        getCloudfrontDistribution(cloudfront, cloudfrontDistributionRootOptions.DistributionId)
+          .then((data) => {
+            data.DistributionConfig.DefaultRootObject = cloudfrontDistributionRootOptions.DefaultRootObject
+            return updateCloudfrontDistribution(cloudfront, {
+              Id: cloudfrontDistributionRootOptions.DistributionId,
+              DistributionConfig: data.DistributionConfig,
+              IfMatch: data.ETag
+            })
+          })
+          .then(resolve)
+          .catch(reject)
       } else {
         return resolve(null)
       }
